@@ -1,0 +1,89 @@
+# On a push to main that changes the app or how it is packaged: run the tests, build the app for
+# Apple Silicon, package it as a DMG, and publish it as a GitHub release tagged v<version>.
+# Only the newest release is kept.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - 'Scripts/build-app.sh'
+      - 'Scripts/make-dmg.sh'
+      - 'Scripts/next-version.sh'
+      - 'Scripts/Info.plist'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # The app needs the macOS 27 SDK and the tests need a macOS 27 host. `xcode-27` (macOS 27, Xcode 27)
+    # is in public preview: https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md
+    runs-on: xcode-27
+    timeout-minutes: 30
+    permissions:
+      contents: write  # create the tag and the release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      # Scripts/build-app.sh defaults to /Applications/Xcode.app; use the runner's selected Xcode instead.
+      - name: Toolchain
+        run: |
+          echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
+          xcodebuild -version
+          swift --version
+
+      - name: Test
+        run: swift test
+
+      # Next version: Info.plist's major.minor, and a patch one above the highest released patch for
+      # that major.minor (at least Info.plist's patch). The first release is Info.plist's version.
+      - name: Version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./Scripts/next-version.sh "$(gh release list --limit 1000 --json tagName --jq '.[].tagName')" >> "$GITHUB_OUTPUT"
+
+      - name: Build app
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: ./Scripts/build-app.sh
+
+      - name: Build DMG
+        run: ./Scripts/make-dmg.sh "${{ steps.version.outputs.version }}"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v$VERSION" "build/Recorder-$VERSION.dmg" \
+            --target "$GITHUB_SHA" \
+            --title "Recorder $VERSION" \
+            --notes "Built from ${GITHUB_SHA::7}. Apple Silicon, macOS 27 or later.
+
+          The app is ad-hoc signed and not notarized. After copying it to Applications, open it once,
+          then allow it in System Settings > Privacy & Security > Open Anyway. The Screen Recording
+          and Microphone permissions must be granted again after each update."
+
+      # Keep only the newest release; delete older ones together with their tags.
+      - name: Prune old releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 1000 --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[1:][] | .tagName' |
+          while read -r tag; do
+            gh release delete "$tag" --cleanup-tag --yes
+          done
