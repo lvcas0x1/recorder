@@ -23,7 +23,7 @@ Recorder is a free, open-source macOS menu-bar screen recorder. It records the f
 
 Requirements: macOS 27 or later on Apple Silicon.
 
-1. Download `Recorder-<version>.dmg` from the [latest release](https://github.com/lvcas0x1/recoder/releases/latest).
+1. Download `Recorder-<version>.dmg` from the [latest release](https://github.com/lvcas0x1/recorder/releases/latest).
 2. Open the DMG and drag **Recorder** to **Applications**.
 3. Open Recorder once. The app is not notarized, so macOS blocks it the first time: go to **System Settings > Privacy & Security** and click **Open Anyway**.
 4. Grant **Screen Recording** in **System Settings > Privacy & Security > Screen & System Audio Recording**. Recorder shows an onboarding window until it is granted.
