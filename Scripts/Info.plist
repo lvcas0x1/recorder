@@ -11,6 +11,9 @@
     <key>LSMinimumSystemVersion</key><string>27.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
+    <key>SUFeedURL</key><string>https://github.com/lvcas0x1/recorder/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key><string>6BlxmjyI/AGezS0hJZQfvm6ELvwB25VuJcHHEB1ebUQ=</string>
+    <key>SUEnableAutomaticChecks</key><true/>
     <key>NSMicrophoneUsageDescription</key><string>Recorder records your voice into the video when Microphone is turned on.</string>
 </dict>
 </plist>

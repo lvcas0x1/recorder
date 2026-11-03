@@ -11,6 +11,10 @@ let package = Package(
     products: [
         .executable(name: "Recorder", targets: ["Recorder"])
     ],
+    dependencies: [
+        // In-app updates. Scripts/build-app.sh embeds Sparkle.framework into the app bundle.
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.1")
+    ],
     targets: modules.flatMap { name -> [Target] in
         [
             .target(
@@ -27,7 +31,7 @@ let package = Package(
     } + [
         .executableTarget(
             name: "Recorder",
-            dependencies: modules.map { .target(name: $0) },
+            dependencies: modules.map { .target(name: $0) } + [.product(name: "Sparkle", package: "Sparkle")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]

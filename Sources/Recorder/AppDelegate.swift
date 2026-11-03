@@ -2,6 +2,7 @@ import AppKit
 import Recording
 import Selection
 import Settings
+import Sparkle
 import os
 
 @MainActor
@@ -15,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let notices = NoticeHUD()
     private lazy var coordinator = RecordingCoordinator(settings: settings, notices: notices)
     private lazy var preferences = PreferencesWindowController(settings: settings, hotkeys: hotkeys)
+    /// Sparkle updater: checks the appcast (Info.plist `SUFeedURL`) automatically and on demand.
+    private lazy var updater = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: self)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -25,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.imagePosition = .imageLeading
         }
         statusItem = item
+        _ = updater
         coordinator.onIndicatorChange = { [weak self] in self?.refreshIndicator() }
         refreshIndicator()
 
@@ -126,6 +130,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let prefs = NSMenuItem(title: "Preferences\u{2026}", action: #selector(showPreferences), keyEquivalent: ",")
         prefs.target = self
         menu.addItem(prefs)
+        let update = NSMenuItem(title: "Update", action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
+        update.target = updater
+        menu.addItem(update)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Recorder", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
@@ -185,6 +192,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 onboarding.show()
             }
         }
+    }
+}
+
+// MARK: Update reminders
+
+/// Gentle reminders for a menu-bar app: while an update alert is shown, the app appears in the Dock
+/// (badged when the check was scheduled) so the alert is not lost behind other windows.
+/// https://sparkle-project.org/documentation/gentle-reminders/
+extension AppDelegate: @preconcurrency SPUStandardUserDriverDelegate {
+    var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    func standardUserDriverWillHandleShowingUpdate(_ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState) {
+        NSApp.setActivationPolicy(.regular)
+        if !state.userInitiated {
+            NSApp.dockTile.badgeLabel = "1"
+        }
+    }
+
+    func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
+        NSApp.dockTile.badgeLabel = ""
+    }
+
+    func standardUserDriverWillFinishUpdateSession() {
+        NSApp.setActivationPolicy(.accessory)
     }
 }
 

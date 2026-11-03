@@ -1,6 +1,6 @@
 # Recorder: developer guide
 
-Recorder is a native macOS menu-bar screen recorder written in Swift (AppKit + SwiftUI) and built with Swift Package Manager. It has no third-party package dependencies.
+Recorder is a native macOS menu-bar screen recorder written in Swift (AppKit + SwiftUI) and built with Swift Package Manager. Its only third-party package is [Sparkle](https://sparkle-project.org/) for in-app updates.
 The planning artifacts are in `openspec/changes/add-screen-recorder-app/` (proposal, specs, design, tasks).
 
 ## Requirements
@@ -22,12 +22,19 @@ open build/Recorder.app
 |---|---|
 | `APP_VERSION` | `CFBundleShortVersionString` of the bundle |
 | `BUILD_NUMBER` | `CFBundleVersion` of the bundle |
-| `SIGN_IDENTITY` | Code-signing identity (default `Screenshot Dev`) |
+| `SIGN_IDENTITY` | Code-signing identity (default `Recorder Code Signing`) |
 | `DEVELOPER_DIR` | Developer directory (default `/Applications/Xcode.app/Contents/Developer`) |
 
 ### Signing and permissions
 
-macOS ties the Screen Recording permission to the app's code signature. `Scripts/build-app.sh` signs with a local code-signing identity named `Screenshot Dev` when one exists in your keychain, so the permission survives rebuilds. Otherwise it falls back to ad-hoc signing with a warning. Use another identity with `SIGN_IDENTITY="My Identity" Scripts/build-app.sh`.
+macOS ties the Screen Recording and Microphone permissions to the app's code signature. With ad-hoc signing (`codesign --sign -`) the designated requirement is the code hash, which changes on every build, so the permissions are lost after each rebuild or update.
+Recorder is therefore signed with a self-signed certificate, **Recorder Code Signing** (valid until 2036-10-31). The designated requirement is then `identifier "dev.lvcas0x1.recorder" and certificate leaf = H"95786a7b…"`, which stays the same across builds as long as the same certificate is used.
+
+- **Local builds:** `Scripts/build-app.sh` signs with `Recorder Code Signing` from your login keychain, and falls back to ad-hoc signing with a warning when it is missing. Use another identity with `SIGN_IDENTITY="My Identity" Scripts/build-app.sh`.
+- **CI:** the same certificate is imported from the `SIGNING_CERTIFICATE_P12` and `SIGNING_CERTIFICATE_PASSWORD` secrets into a temporary keychain, so releases and local builds have the same designated requirement.
+- Sparkle.framework is embedded in `Contents/Frameworks` without its XPC services (needed only by sandboxed apps) and every nested component is signed inside-out with the same identity ([Sparkle: sandboxing](https://sparkle-project.org/documentation/sandboxing/)). Do not enable the hardened runtime: library validation would reject the framework, because a self-signed certificate has no Team ID.
+
+Keep a backup of the certificate (with its private key) outside the keychain. A new certificate changes the designated requirement, so every user would have to grant the permissions once more.
 
 There is no notarization and no App Store packaging.
 
@@ -53,10 +60,18 @@ Per-scenario verification status: [`docs/verification-checklist.md`](docs/verifi
 
 ## Release
 
-`.github/workflows/release.yml` runs on every push to `main` that changes `Sources/`, `Tests/`, `Package.swift`, the build scripts, `Scripts/Info.plist`, or the workflow itself (and on manual dispatch). It runs the tests, builds the app, packages it with `Scripts/make-dmg.sh`, publishes a GitHub release `v<version>` with `Recorder-<version>.dmg`, and deletes all older releases and their tags.
+`.github/workflows/release.yml` runs on every push to `main` that changes `Sources/`, `Tests/`, `Package.swift`, `Package.resolved`, the build scripts, `Scripts/Info.plist`, or the workflow itself (and on manual dispatch). It runs the tests, imports the signing certificate, builds and signs the app, packages it with `Scripts/make-dmg.sh`, writes the Sparkle update feed, publishes a GitHub release `v<version>` with `Recorder-<version>.dmg` and `appcast.xml`, and deletes all older releases and their tags.
 
 The version keeps `Scripts/Info.plist`'s major.minor and raises the patch (`Scripts/next-version.sh`).
-It runs on GitHub's `xcode-27` runner (macOS 27, Xcode 27), which is in public preview ([image details](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)). Release builds are ad-hoc signed.
+It runs on GitHub's `xcode-27` runner (macOS 27, Xcode 27), which is in public preview ([image details](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)). Release builds are signed with the self-signed certificate above.
+
+### In-app updates (Sparkle)
+
+- The app reads the feed from `SUFeedURL` = `https://github.com/lvcas0x1/recorder/releases/latest/download/appcast.xml`. Only the newest release is kept, so this URL always points to the current feed.
+- `Scripts/make-appcast.sh` writes `build/appcast.xml` with the DMG's EdDSA signature from Sparkle's `sign_update`. In CI the private key comes from the `SPARKLE_ED_PRIVATE_KEY` secret; locally it is read from the login keychain (account `dev.lvcas0x1.recorder`). The public key is `SUPublicEDKey` in `Scripts/Info.plist`.
+- Sparkle installs an update only if its EdDSA signature matches `SUPublicEDKey`. If the private key is lost, existing installs cannot be updated any more, so keep a backup of it.
+- `CFBundleVersion` is the workflow run number, so every release has a higher build number than the previous one, which Sparkle uses to compare versions.
+- Automatic checks are on (`SUEnableAutomaticChecks`); the menu also has **Update**.
 
 ## Project layout
 
@@ -83,8 +98,16 @@ Hotkey registration failures at launch are written to the log (subsystem `dev.lv
 
 ## Dependencies
 
-The package declares no external dependencies (`Package.swift` has no `dependencies:`), so there is no `Package.resolved`. The repository contains no vendored third-party code or binaries.
-The app links only Apple system frameworks from the macOS SDK. Open-source components are the Swift toolchain and the CI tooling.
+The only package dependency is Sparkle, pinned to an exact version in `Package.swift` and `Package.resolved`. The repository contains no vendored third-party code or binaries.
+The app also links Apple system frameworks from the macOS SDK. The other open-source components are the Swift toolchain and the CI tooling.
+
+### Packages
+
+| Package | Version | Use | License | Open source |
+|---|---|---|---|---|
+| [Sparkle](https://github.com/sparkle-project/Sparkle) | 2.10.1 | In-app updates (framework embedded in the app; `sign_update` in CI) | [MIT](https://github.com/sparkle-project/Sparkle/blob/2.x/LICENSE) | Yes |
+
+Sparkle's license (with the notices of the code it includes) ships in the app at `Contents/Resources/licenses/Sparkle-LICENSE`, copied from `Scripts/licenses/`, as the MIT license requires.
 
 ### Toolchain
 

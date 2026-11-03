@@ -18,6 +18,7 @@ Recorder is a free, open-source macOS menu-bar screen recorder. It records the f
 - **Cursor:** choose whether the mouse cursor is recorded, even during a recording.
 - **Clean output:** the recording frame, toolbox, and notices never appear in the video.
 - **Configurable** shortcuts, resolution, audio, and output folder. Appearance follows the system light/dark setting and accent color.
+- **Automatic updates** through Sparkle: Recorder checks for new versions and installs them when you agree.
 
 ## Installation
 
@@ -30,9 +31,13 @@ Requirements: macOS 27 or later on Apple Silicon.
 5. On the first recording, macOS may ask whether Recorder may bypass the system's private window picker. Choose **Allow**.
 6. **Microphone** permission is asked the first time you record with Microphone on. If it is denied, the recording continues without the microphone.
 
-The Screen Recording and Microphone permissions must be granted again after each update.
-
 Recorder has no Dock icon. Look for the record icon in the menu bar. While recording, the menu-bar item shows the elapsed time, and clicking it stops the recording. If you use a menu-bar manager (Ice, Bartender, and so on), set Recorder to always show.
+
+### Updates
+
+Recorder checks for updates automatically and asks before installing one. To check now, right-click the menu-bar icon and choose **Update**. Updates keep the Screen Recording and Microphone permissions.
+
+If you installed a version without **Update** in its menu, install the latest release once by hand as above; later versions update themselves.
 
 ## Usage
 
